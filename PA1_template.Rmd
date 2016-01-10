@@ -1,25 +1,165 @@
+RR_Course Project One, McDavid
+=========================================================
+
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "RR_ Course Project One"
+author: "JCM"
+date: "January 10, 2016"
+output: html_document
 ---
 
+ ReproRsrch_Project One.R, John C. McDavid, 01-07-2016
+   Course Project One
+   Rev last 01-10-2016
+   R vers 3.2.2 Fire Safety
 
-## Loading and preprocessing the data
+# Project & Analysis Description
 
+ This assignment makes use of data from a personal activity monitoring device. This device collects data at
+ 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual
+ collected during the months of October and November, 2012 and include the number of steps taken in 5 minute
+ intervals each day.
 
+ The data for this assignment can be downloaded from the course web site:
+    .Dataset: Activity monitoring data [52K]
 
-## What is mean total number of steps taken per day?
+ The variables included in this dataset are:
+    .steps: Number of steps taking in a 5-minute interval (missing values are coded as NA)
+    .date: The date on which the measurement was taken in YYYY-MM-DD format
+    .interval: Identifier for the 5-minute interval in which measurement was taken
 
+ The dataset is stored in a comma-separated-value (CSV) file and there are a total of 17,568 observations in
+ this dataset.
 
+# Loading of Data
+set working directory
+setwd("C:\\Users\\jcmcd\\Coursera - Reproducible Research")        # set desired working dir
 
-## What is the average daily activity pattern?
+read in data from csv file
+```{r}
+activity <- read.csv("./data/activity.csv", header = TRUE)
+str(activity)
+```
 
+# Mean Total Steps per Day
+calculate total number of steps per day
+```{r}
+hsum <- tapply(activity$steps, activity$date, FUN = sum, na.rm = TRUE)
+```
 
+histogram of steps per day
+```{r}
+hist(hsum, col = "green", breaks = 10, ylim = c(0, 20), main = "Histogram of Avg Total Steps per Day", xlab = "Total steps per day")
+```
 
-## Imputing missing values
+report mean and median number of steps per day across days
+```{r}
+mean(hsum)
+median(hsum)
+```
 
+# Average Daily Activity Pattern
+calculate mean steps by 5 min interval
+```{r}
+library(dplyr)
+stepsmean <- activity %>% filter(!is.na(steps)) %>% group_by(interval) %>% summarize(AvgSteps = mean(steps))
+```
 
+make time series line plot of of 5 minute interval (x) and average number of steps taken (y) across all days
+```{r}
+with(stepsmean, plot(interval, AvgSteps, type = "l", ylab = "Mean Steps By Interval", xlab = "Minute Interval"))
+```
 
-## Are there differences in activity patterns between weekdays and weekends?
+find which 5 minute interval on average has maximum number of steps
+```{r}
+stepsmean[which.max(stepsmean$AvgSteps),1]
+```
+
+# Imputing Missing Values, Create New Dataset
+total number of missing values in dataset, and percentage of missing values
+```{r}
+sum(is.na(activity$steps))
+mean(is.na(activity$steps))
+```
+
+Strategy:  replace missing values at each 5 min interval with average number of steps for interval across all days
+do this by merging Avg Steps into dataset, arrange back to date and interval, then replace missing value with Average
+```{r}
+actmerge <- merge(activity, stepsmean, by = "interval", sort = FALSE)
+actmerge2 <- arrange(actmerge, date, interval)
+head(actmerge2)
+for (i in 1:nrow(activity)) {
+     if (is.na(actmerge2[i,2])) { actmerge2[i,2] <- actmerge2[i,4]}
+      }
+head(actmerge2)
+```
+
+sum steps per day (by date)
+```{r}
+stepsperday <- actmerge2 %>% filter(!is.na(steps)) %>% group_by(date) %>% summarize(SumDaySteps = sum(steps))
+head(stepsperday)
+```
+
+clean up date format, data frame clean-up
+```{r}
+stepsperday2 <- stepsperday
+stepsperday2$date <- as.Date(as.character(stepsperday2$date), "%Y-%m-%d")
+head(stepsperday2)
+
+stepsperday2  <- data.frame(stepsperday2)
+```
+
+histogram of total number of steps taken each day
+```{r}
+library(ggplot2)
+    # use this for hist of daily steps
+    qplot(stepsperday2$SumDaySteps,
+          geom="histogram",
+          binwidth = 2000,
+          main = "Histogram for Daily Steps", 
+          xlab = "Daily Steps",  
+          fill=I("blue"), 
+          col=I("red"),
+          alpha=I(.2),
+          xlim=c(0,25000))
+```
+    
+report mean and median total number of steps per day with filled in missing values
+```{r}
+mean(stepsperday2$SumDaySteps)
+median(stepsperday2$SumDaySteps)
+```
+mean and median changed slightly due to imputing missing data
+
+# Differences in Activity Patterns Between Weekdays and Weekends
+use previous dataset with imputed missing values, clean up date format, create variable with day name
+```{r}
+actmerge3 <- actmerge2
+actmerge3$date <- as.Date(as.character(actmerge3$date), "%Y-%m-%d")
+head(actmerge3)
+str(actmerge3)
+actmerge3$wkdy <- weekdays(actmerge3$date)
+```
+
+create variable dow to identify weekday or weekend, add column name
+```{r}
+for (i in 1:nrow(actmerge3)) {
+    if(actmerge3[i,5] == "Saturday" | actmerge3[i,5] == "Sunday") {actmerge3[i,6] = "weekend"} else {actmerge3[i,6] = "weekday"}
+}
+names(actmerge3)[6] <- "dow"
+head(actmerge3)
+```
+
+simplify dataframe, calc mean steps by interval and weekday/weekend
+```{r}
+actmerge4 <- actmerge3[,c(1:3,6)]
+stepsmeanbydow <- actmerge4 %>% filter(!is.na(steps)) %>% group_by(interval, dow) %>% summarize(AvgSteps = mean(steps))
+```
+
+use ggplot2 to make panel plot of 5 min interval (x axis) and average number of steps taken, across all weekend or weekday days (y axis)
+```{r}
+library(ggplot2)
+
+g <- ggplot(stepsmeanbydow, aes(x = interval, y = AvgSteps))
+g + geom_line(aes(color = "red")) + facet_grid(dow ~ .)
+```
